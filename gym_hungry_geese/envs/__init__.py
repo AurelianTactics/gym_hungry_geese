@@ -1,0 +1,1 @@
+from gym_hungry_geese.envs.hungry_geese_env import HungryGeeseEnv
