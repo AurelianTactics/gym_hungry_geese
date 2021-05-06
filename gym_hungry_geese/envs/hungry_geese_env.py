@@ -5,13 +5,19 @@ import numpy as np
 
 # single frame observation
 FOOD_OBS = 1.
-FOOD_STEP = .01  # food value varies based on the hunger rate
-NEXT_STEP_HUNGER = 0.5  # geese shrink every hunger_rate steps
-geese_dict = {'agent': {'head': 0.325, 'mid': 0.1375, 'tail': 0.075, 'last_head': 0.2, 'last_head_no_tail': 0.2625},
-              0: {'head': -0.075, 'mid': -0.2625, 'tail': -0.325, 'last_head': -0.2, 'last_head_no_tail': -0.1375},
-              1: {'head': -0.04, 'mid': -0.5875, 'tail': -0.65, 'last_head': -0.525, 'last_head_no_tail': -0.4625},
-              2: {'head': -0.725, 'mid': -0.9125, 'tail': -0.975, 'last_head': -0.85, 'last_head_no_tail': -0.7875}}
-
+# FOOD_STEP = .01  # food value varies based on the hunger rate
+# NEXT_STEP_HUNGER = 0.5  # geese shrink every hunger_rate steps
+# geese_dict = {'agent': {'head': 0.325, 'mid': 0.1375, 'tail': 0.075, 'last_head': 0.2, 'last_head_no_tail': 0.2625},
+#               0: {'head': -0.075, 'mid': -0.2625, 'tail': -0.325, 'last_head': -0.2, 'last_head_no_tail': -0.1375},
+#               1: {'head': -0.04, 'mid': -0.5875, 'tail': -0.65, 'last_head': -0.525, 'last_head_no_tail': -0.4625},
+#               2: {'head': -0.725, 'mid': -0.9125, 'tail': -0.975, 'last_head': -0.85, 'last_head_no_tail': -0.7875}}
+# simplifying it a bit. might lose a little info in some edge cases
+FOOD_STEP = .001  # food value varies based on the hunger rate
+NEXT_STEP_HUNGER = 0.9  # geese shrink every hunger_rate steps
+geese_dict = {'agent': {'head': 0.75, 'mid': 0.375, 'tail': 0.25, 'last_head': 0.5, 'last_head_no_tail': 0.1},
+              0: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1},
+              1: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1},
+              2: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1}}
 
 # obs_list is either of length 1 on a reset (current_obs) or of length 2 (last obs, current obs)
 # obs example: {'remainingOverageTime': 60, 'step': 1, 'geese': [[39], [32], [40], [60]], 'food': [24, 53], 'index': 0}
@@ -69,9 +75,8 @@ def process_obs(obs_list, center_head=False, rows=7, columns=11, hunger_rate=40)
                 if obs_len > 1:
                     new_obs[obs_list[0]['geese'][i][0]] = geese_dict[geese_key]['last_head']
             else:
-                # goose is of length 1, place prior head position if there
-                if obs_len > 1:
-                    # print("placing last head")
+                # goose is of length 1, not turn one and and if space is empty then place prior head position
+                if obs_len > 1 and new_obs[obs_list[0]['geese'][i][0]] == 0:
                     new_obs[obs_list[0]['geese'][i][0]] = geese_dict[geese_key]['last_head_no_tail']
 
     # move head of agent into center position
@@ -90,7 +95,7 @@ def process_obs(obs_list, center_head=False, rows=7, columns=11, hunger_rate=40)
 class HungryGeeseEnv(gym.Env):
     metadata = {'render.modes': ['human', 'ansi']}
 
-    def __init__(self, opponents=['random', 'random', 'random'], center_head=False, debug=False, episode_steps=200,
+    def __init__(self, opponents=['greedy', 'greedy', 'greedy'], center_head=False, debug=False, episode_steps=200,
                  hunger_rate=40):
         super(HungryGeeseEnv, self).__init__()
         # self.num_envs = 1
