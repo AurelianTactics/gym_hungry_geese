@@ -5,19 +5,17 @@ import numpy as np
 
 # single frame observation
 FOOD_OBS = 1.
-# FOOD_STEP = .01  # food value varies based on the hunger rate
-# NEXT_STEP_HUNGER = 0.5  # geese shrink every hunger_rate steps
-# geese_dict = {'agent': {'head': 0.325, 'mid': 0.1375, 'tail': 0.075, 'last_head': 0.2, 'last_head_no_tail': 0.2625},
-#               0: {'head': -0.075, 'mid': -0.2625, 'tail': -0.325, 'last_head': -0.2, 'last_head_no_tail': -0.1375},
-#               1: {'head': -0.04, 'mid': -0.5875, 'tail': -0.65, 'last_head': -0.525, 'last_head_no_tail': -0.4625},
-#               2: {'head': -0.725, 'mid': -0.9125, 'tail': -0.975, 'last_head': -0.85, 'last_head_no_tail': -0.7875}}
-# simplifying it a bit. might lose a little info in some edge cases
 FOOD_STEP = .001  # food value varies based on the hunger rate
 NEXT_STEP_HUNGER = 0.9  # geese shrink every hunger_rate steps
-geese_dict = {'agent': {'head': 0.75, 'mid': 0.375, 'tail': 0.25, 'last_head': 0.5, 'last_head_no_tail': 0.1},
-              0: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1},
-              1: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1},
-              2: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1}}
+geese_dict = {'agent': {'head': 0.325, 'mid': 0.1375, 'tail': 0.075, 'last_head': 0.2, 'last_head_no_tail': 0.2625},
+              0: {'head': -0.075, 'mid': -0.2625, 'tail': -0.325, 'last_head': -0.2, 'last_head_no_tail': -0.1375},
+              1: {'head': -0.4, 'mid': -0.5875, 'tail': -0.65, 'last_head': -0.525, 'last_head_no_tail': -0.4625},
+              2: {'head': -0.725, 'mid': -0.9125, 'tail': -0.975, 'last_head': -0.85, 'last_head_no_tail': -0.7875}}
+# simplifying it a bit. might lose a little info in some edge cases
+# geese_dict = {'agent': {'head': 0.75, 'mid': 0.375, 'tail': 0.25, 'last_head': 0.5, 'last_head_no_tail': 0.1},
+#               0: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1},
+#               1: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1},
+#               2: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1}}
 
 # obs_list is either of length 1 on a reset (current_obs) or of length 2 (last obs, current obs)
 # obs example: {'remainingOverageTime': 60, 'step': 1, 'geese': [[39], [32], [40], [60]], 'food': [24, 53], 'index': 0}
@@ -89,7 +87,8 @@ def process_obs(obs_list, center_head=False, rows=7, columns=11, hunger_rate=40)
 
     # print("existings obs list", obs_list)
     # reshape new obs to grid
-    return new_obs.reshape(rows, columns), obs_list
+    return new_obs.reshape(rows, columns, 1), obs_list
+    #return new_obs, obs_list
 
 
 class HungryGeeseEnv(gym.Env):
@@ -113,25 +112,34 @@ class HungryGeeseEnv(gym.Env):
         # env takes strings only as actions ["NORTH", "EAST", "SOUTH", "WEST"]
         self.action_space = spaces.Discrete(4)
         self.action_list = ["NORTH", "EAST", "SOUTH", "WEST"]
+        self.action_dict_opposite = {"NORTH":"SOUTH", "EAST":"WEST", "SOUTH":"NORTH", "WEST":"EAST", "NONE":"NONE"}
+        self.last_action = "NONE"
         # reward
         self.reward_range = (-1, 1)  # not sure if this is needed
-        self.reward_dict = {'survive': 0., 'food': 0.001, 'death': -1., 1: 1., 2: 0.1, 3: -0.8,
+        self.reward_dict = {'survive': 0.0, 'food': 0.01, 'death': -1., 1: 1., 2: 0.1, 3: -0.8,
                             4: -0.9}  # the numbers are what place agent came in
         # obs_list stores obs from kaggle env. this env's obs space is preprocessed into a 2D grid of float values
         self.obs_list = []
         self.observation_space = spaces.Box(low=-1., high=1.,
                                             shape=(self.rows, self.columns, 1), dtype=np.float32)
+        # self.observation_space = spaces.Box(low=-1., high=1.,
+        #                                     shape=(self.rows*self.columns,), dtype=np.float32)
         self.obs = self.env.reset()
         self.center_head = center_head  # center obs on agents head
 
     def step(self, action):
         action_string = self.action_list[action]
+        # opposite action means instant death. if opposte action then choose random one among other 3
+        if self.action_dict_opposite[self.last_action] == action_string:
+            action = (action + np.random.randint(1,4)) % 4
+            action_string = self.action_list[action]
         obs, r, done, info = self.env.step(action_string)
         self.obs_list.append(obs)
         reward = self._process_reward(r, self.obs_list, done)
         obs, self.obs_list = process_obs(self.obs_list, center_head=self.center_head, rows=self.rows,
                                          columns=self.columns,
                                          hunger_rate=self.hunger_rate)
+        self.last_action = action_string
         return obs, reward, done, info
 
     def reset(self):
@@ -140,6 +148,7 @@ class HungryGeeseEnv(gym.Env):
         obs, self.obs_list = process_obs(self.obs_list, center_head=self.center_head, rows=self.rows,
                                          columns=self.columns,
                                          hunger_rate=self.hunger_rate)
+        self.last_action = "NONE"
         return obs
 
     # making this seperate function outside of the gym env because agent needs access to it at run time
@@ -189,4 +198,4 @@ class HungryGeeseEnv(gym.Env):
         print(self.obs_list[-1])
         obs, _ = process_obs(self.obs_list, center_head=self.center_head, rows=self.rows, columns=self.columns,
                              hunger_rate=self.hunger_rate)
-        print(obs)
+        print(obs.reshape(self.rows,self.columns))
