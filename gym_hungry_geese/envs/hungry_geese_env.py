@@ -5,12 +5,9 @@ import numpy as np
 
 # single frame observation
 FOOD_OBS = 1.
-FOOD_STEP = .001  # food value varies based on the hunger rate
-NEXT_STEP_HUNGER = 0.9  # geese shrink every hunger_rate steps
-geese_dict = {'agent': {'head': 0.325, 'mid': 0.1375, 'tail': 0.075, 'last_head': 0.2, 'last_head_no_tail': 0.2625},
-              0: {'head': -0.075, 'mid': -0.2625, 'tail': -0.325, 'last_head': -0.2, 'last_head_no_tail': -0.1375},
-              1: {'head': -0.4, 'mid': -0.5875, 'tail': -0.65, 'last_head': -0.525, 'last_head_no_tail': -0.4625},
-              2: {'head': -0.725, 'mid': -0.9125, 'tail': -0.975, 'last_head': -0.85, 'last_head_no_tail': -0.7875}}
+FOOD_STEP = .004  # food value varies based on the hunger rate
+NEXT_STEP_HUNGER = 0.7  # geese shrink every hunger_rate steps
+geese_dict = {'head': -1., 'mid': -0.75, 'tail': -.5, 'last_head': -0.75}
 # simplifying it a bit. might lose a little info in some edge cases
 # geese_dict = {'agent': {'head': 0.75, 'mid': 0.375, 'tail': 0.25, 'last_head': 0.5, 'last_head_no_tail': 0.1},
 #               0: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1},
@@ -23,10 +20,80 @@ geese_dict = {'agent': {'head': 0.325, 'mid': 0.1375, 'tail': 0.075, 'last_head'
 # head is always first
 
 
+# turn kaggle into multi layer obs for agent to read
+    # layer 0 is agent goose, 1 is agent prior head
+    # layers 2-7 are same for opponents
+    # layer 8 is food
+def process_obs(obs_list, rows=7, columns=11, hunger_rate=40):
+    # only need last two observations
+    if len(obs_list) > 2:
+        obs_list = obs_list[1:]
+
+    obs_len = len(obs_list)
+    new_obs = np.zeros((9, rows * columns), dtype=np.float32)
+
+    # place food. I modify the food by the hunger rate so agent can hopefully predict when it will shrink
+    hunger_steps = obs_list[-1]['step'] % hunger_rate
+    if hunger_steps == hunger_rate - 1:
+        food_value = NEXT_STEP_HUNGER
+    else:
+        food_value = FOOD_OBS - hunger_steps * FOOD_STEP
+    for i in obs_list[-1]['food']:
+        new_obs[8, i] = food_value
+
+    # place geese and gees prior head
+    geese_obs = obs_list[-1]['geese']
+    agent_index = obs_list[-1]['index']
+    # place geese body parts
+    for i in range(0, len(geese_obs)):
+        if i == agent_index:
+            # agent always key 0
+            geese_key = 0
+        else:
+            # opponent keys are 2, 4, 6
+            if i < agent_index:
+                geese_key = (i + 1)*2
+            else:
+                geese_key = i*2
+
+        goose_len = len(geese_obs[i])
+        # check if goose is alive
+        if goose_len > 0:
+            # place head
+            new_obs[geese_key, geese_obs[i][0]] = geese_dict['head']
+            # check if goose has other body parts than head
+            if goose_len > 1:
+                for j in range(1, goose_len - 1):
+                    new_obs[geese_key, geese_obs[i][j]] = geese_dict['mid']
+                # place tail
+                new_obs[geese_key, geese_obs[i][-1]] = geese_dict['tail']
+            # place head position from last turn
+            if obs_len > 1:
+                new_obs[geese_key+1, obs_list[0]['geese'][i][0]] = geese_dict['last_head']
+
+    #print("debugging obs")
+    #print(new_obs.reshape(9, rows, columns))
+    # print(new_obs[6].reshape(1, rows, columns))
+    # print(new_obs[7].reshape(1, rows, columns))
+
+    # print("existing obs list", obs_list)
+    # reshape new obs to grid
+    return new_obs.reshape(9, rows, columns), obs_list
+
+
 # turn kaggle env obs into 2D grid with everything represented
-def process_obs(obs_list, center_head=False, rows=7, columns=11, hunger_rate=40):
+def process_obs_2D(obs_list, center_head=False, rows=7, columns=11, hunger_rate=40):
     # https://www.kaggle.com/victordelafuente/dqn-goose-with-stable-baselines3-pytorch
     # https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
+
+    # single frame observation
+    FOOD_OBS = 1.
+    FOOD_STEP = .001  # food value varies based on the hunger rate
+    NEXT_STEP_HUNGER = 0.9  # geese shrink every hunger_rate steps
+    geese_dict = {'agent': {'head': 0.325, 'mid': 0.1375, 'tail': 0.075, 'last_head': 0.2, 'last_head_no_tail': 0.2625},
+                  0: {'head': -0.075, 'mid': -0.2625, 'tail': -0.325, 'last_head': -0.2, 'last_head_no_tail': -0.1375},
+                  1: {'head': -0.4, 'mid': -0.5875, 'tail': -0.65, 'last_head': -0.525, 'last_head_no_tail': -0.4625},
+                  2: {'head': -0.725, 'mid': -0.9125, 'tail': -0.975, 'last_head': -0.85, 'last_head_no_tail': -0.7875}}
 
     # only need last two observations
     if len(obs_list) > 2:
@@ -58,7 +125,7 @@ def process_obs(obs_list, center_head=False, rows=7, columns=11, hunger_rate=40)
             else:
                 geese_key = i
         goose_len = len(geese_obs[i])
-        # check if goose is alife
+        # check if goose is alive
         if goose_len > 0:
             # place head
             # import pdb; pdb.set_trace()
@@ -112,7 +179,7 @@ class HungryGeeseEnv(gym.Env):
         # env takes strings only as actions ["NORTH", "EAST", "SOUTH", "WEST"]
         self.action_space = spaces.Discrete(4)
         self.action_list = ["NORTH", "EAST", "SOUTH", "WEST"]
-        self.action_dict_opposite = {"NORTH":"SOUTH", "EAST":"WEST", "SOUTH":"NORTH", "WEST":"EAST", "NONE":"NONE"}
+        self.action_dict_opposite = {"NORTH": "SOUTH", "EAST": "WEST", "SOUTH": "NORTH", "WEST": "EAST", "NONE": "NONE"}
         self.last_action = "NONE"
         # reward
         self.reward_range = (-1, 1)  # not sure if this is needed
@@ -121,7 +188,7 @@ class HungryGeeseEnv(gym.Env):
         # obs_list stores obs from kaggle env. this env's obs space is preprocessed into a 2D grid of float values
         self.obs_list = []
         self.observation_space = spaces.Box(low=-1., high=1.,
-                                            shape=(self.rows, self.columns, 1), dtype=np.float32)
+                                            shape=(9, self.rows, self.columns), dtype=np.float32)
         # self.observation_space = spaces.Box(low=-1., high=1.,
         #                                     shape=(self.rows*self.columns,), dtype=np.float32)
         self.obs = self.env.reset()
@@ -136,8 +203,7 @@ class HungryGeeseEnv(gym.Env):
         obs, r, done, info = self.env.step(action_string)
         self.obs_list.append(obs)
         reward = self._process_reward(r, self.obs_list, done)
-        obs, self.obs_list = process_obs(self.obs_list, center_head=self.center_head, rows=self.rows,
-                                         columns=self.columns,
+        obs, self.obs_list = process_obs(self.obs_list, rows=self.rows, columns=self.columns,
                                          hunger_rate=self.hunger_rate)
         self.last_action = action_string
         return obs, reward, done, info
@@ -145,8 +211,7 @@ class HungryGeeseEnv(gym.Env):
     def reset(self):
         obs = self.env.reset()
         self.obs_list = [obs]
-        obs, self.obs_list = process_obs(self.obs_list, center_head=self.center_head, rows=self.rows,
-                                         columns=self.columns,
+        obs, self.obs_list = process_obs(self.obs_list, rows=self.rows, columns=self.columns,
                                          hunger_rate=self.hunger_rate)
         self.last_action = "NONE"
         return obs
@@ -196,6 +261,6 @@ class HungryGeeseEnv(gym.Env):
 
     def render(self, mode='human'):
         print(self.obs_list[-1])
-        obs, _ = process_obs(self.obs_list, center_head=self.center_head, rows=self.rows, columns=self.columns,
-                             hunger_rate=self.hunger_rate)
-        print(obs.reshape(self.rows,self.columns))
+        obs, _ = process_obs_2D(self.obs_list, center_head=self.center_head, rows=self.rows, columns=self.columns,
+                                hunger_rate=self.hunger_rate)
+        print(obs.reshape(self.rows, self.columns))
