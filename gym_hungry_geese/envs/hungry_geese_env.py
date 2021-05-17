@@ -183,7 +183,7 @@ class HungryGeeseEnv(gym.Env):
         self.last_action = "NONE"
         # reward
         self.reward_range = (-1, 1)  # not sure if this is needed
-        self.reward_dict = {'survive': 0.0, 'food': 0.01, 'death': -1., 1: 1., 2: 0.1, 3: -0.8,
+        self.reward_dict = {'survive': 0.0, 'food': 0.001, 'death': -1., 1: 1., 2: 0.1, 3: -0.8,
                             4: -0.9}  # the numbers are what place agent came in
         # obs_list stores obs from kaggle env. this env's obs space is preprocessed into a 2D grid of float values
         self.obs_list = []
