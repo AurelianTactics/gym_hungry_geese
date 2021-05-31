@@ -27,6 +27,10 @@ def center_head_offset(pos, row_offset, col_offset, rows=7, columns=11, center_h
         pos = pos_row * rows + pos_col
     return pos
 
+def get_offsets(pos, rows=7, columns=11):
+    r_offset = (rows // 2) - (pos // columns)
+    c_offset = (columns // 2) - (pos % columns)
+    return r_offset, c_offset
 
 # turn kaggle into multi layer obs for agent to read
     # layer 0 is agent goose, 1 is agent prior head
@@ -45,12 +49,8 @@ def process_obs(obs_list, rows=7, columns=11, hunger_rate=40, center_head=True):
     agent_index = obs_list[-1]['index']
     # get agent offset
     if center_head and len(geese_obs[agent_index]) > 0:
-        head_index = geese_obs[agent_index][0]
-        row_offset = (rows//2) - (head_index // columns)
-        column_offset = (columns//2) - (head_index % columns)
-        head_index = obs_list[0]['geese'][agent_index]
-        row_last_offset = (rows//2) - (head_index // columns)
-        column_last_offset = (columns//2) - (head_index % columns)
+        row_offset, column_offset = get_offsets(obs_list[-1]['geese'][agent_index][0], rows, columns)
+        row_last_offset, column_last_offset = get_offsets(obs_list[0]['geese'][agent_index][0], rows, columns)
     else:
         row_offset, column_offset, row_last_offset, column_last_offset = 0, 0, 0, 0
     # place geese body parts
@@ -132,12 +132,8 @@ def process_obs_2D(obs_list, center_head=True, rows=7, columns=11, hunger_rate=4
     agent_index = current_obs['index']
     # get agent offset
     if center_head and len(geese_obs[agent_index]) > 0:
-        head_index = geese_obs[agent_index][0]
-        row_offset = (rows//2) - (head_index // columns)
-        column_offset = (columns//2) - (head_index % columns)
-        head_index = obs_list[0]['geese'][agent_index]
-        row_last_offset = (rows//2) - (head_index // columns)
-        column_last_offset = (columns//2) - (head_index % columns)
+        row_offset, column_offset = get_offsets(obs_list[-1]['geese'][agent_index][0], rows, columns)
+        row_last_offset, column_last_offset = get_offsets(obs_list[0]['geese'][agent_index][0], rows, columns)
     else:
         row_offset, column_offset, row_last_offset, column_last_offset = 0, 0, 0, 0
     # place snake body parts
