@@ -4,10 +4,10 @@ from gym import spaces
 import numpy as np
 
 # single frame observation
-FOOD_OBS = 1.
+FOOD_OBS = 0.5
 FOOD_STEP = .004  # food value varies based on the hunger rate
-NEXT_STEP_HUNGER = 0.7  # geese shrink every hunger_rate steps
-geese_dict = {'head': -1., 'mid': -0.75, 'tail': -.5, 'last_head': -0.75}
+NEXT_STEP_HUNGER = 0.2  # geese shrink every hunger_rate steps
+geese_dict = {'head': 1., 'mid': 0.9, 'tail': .8, 'last_head': 0.95}
 # simplifying it a bit. might lose a little info in some edge cases
 # geese_dict = {'agent': {'head': 0.75, 'mid': 0.375, 'tail': 0.25, 'last_head': 0.5, 'last_head_no_tail': 0.1},
 #               0: {'head': -0.75, 'mid': -0.375, 'tail': -0.25, 'last_head': -0.5, 'last_head_no_tail': -0.1},
@@ -20,11 +20,19 @@ geese_dict = {'head': -1., 'mid': -0.75, 'tail': -.5, 'last_head': -0.75}
 # head is always first
 
 
+def center_head_offset(pos, row_offset, col_offset, rows=7, columns=11, center_head=True):
+    if center_head:
+        pos_row = ((pos // columns) + row_offset) % rows
+        pos_col = ((pos % columns) + col_offset) % columns
+        pos = pos_row * rows + pos_col
+    return pos
+
+
 # turn kaggle into multi layer obs for agent to read
     # layer 0 is agent goose, 1 is agent prior head
     # layers 2-7 are same for opponents
     # layer 8 is food
-def process_obs(obs_list, rows=7, columns=11, hunger_rate=40):
+def process_obs(obs_list, rows=7, columns=11, hunger_rate=40, center_head=True):
     # only need last two observations
     if len(obs_list) > 2:
         obs_list = obs_list[1:]
@@ -32,18 +40,19 @@ def process_obs(obs_list, rows=7, columns=11, hunger_rate=40):
     obs_len = len(obs_list)
     new_obs = np.zeros((9, rows * columns), dtype=np.float32)
 
-    # place food. I modify the food by the hunger rate so agent can hopefully predict when it will shrink
-    hunger_steps = obs_list[-1]['step'] % hunger_rate
-    if hunger_steps == hunger_rate - 1:
-        food_value = NEXT_STEP_HUNGER
-    else:
-        food_value = FOOD_OBS - hunger_steps * FOOD_STEP
-    for i in obs_list[-1]['food']:
-        new_obs[8, i] = food_value
-
-    # place geese and gees prior head
+    # place geese and geese prior head
     geese_obs = obs_list[-1]['geese']
     agent_index = obs_list[-1]['index']
+    # get agent offset
+    if center_head and len(geese_obs[agent_index]) > 0:
+        head_index = geese_obs[agent_index][0]
+        row_offset = (rows//2) - (head_index // columns)
+        column_offset = (columns//2) - (head_index % columns)
+        head_index = obs_list[0]['geese'][agent_index]
+        row_last_offset = (rows//2) - (head_index // columns)
+        column_last_offset = (columns//2) - (head_index % columns)
+    else:
+        row_offset, column_offset, row_last_offset, column_last_offset = 0, 0, 0, 0
     # place geese body parts
     for i in range(0, len(geese_obs)):
         if i == agent_index:
@@ -60,17 +69,32 @@ def process_obs(obs_list, rows=7, columns=11, hunger_rate=40):
         # check if goose is alive
         if goose_len > 0:
             # place head
-            new_obs[geese_key, geese_obs[i][0]] = geese_dict['head']
+            pos_index = center_head_offset(geese_obs[i][0], row_offset, column_offset, rows, columns, center_head)
+            new_obs[geese_key, pos_index] = geese_dict['head']
             # check if goose has other body parts than head
             if goose_len > 1:
                 for j in range(1, goose_len - 1):
-                    new_obs[geese_key, geese_obs[i][j]] = geese_dict['mid']
+                    pos_index = center_head_offset(geese_obs[i][j], row_offset, column_offset, rows, columns,
+                                                   center_head)
+                    new_obs[geese_key, pos_index] = geese_dict['mid']
                 # place tail
-                new_obs[geese_key, geese_obs[i][-1]] = geese_dict['tail']
+                pos_index = center_head_offset(geese_obs[i][-1], row_offset, column_offset, rows, columns, center_head)
+                new_obs[geese_key, pos_index] = geese_dict['tail']
             # place head position from last turn
             if obs_len > 1:
-                new_obs[geese_key+1, obs_list[0]['geese'][i][0]] = geese_dict['last_head']
+                pos_index = center_head_offset(obs_list[0]['geese'][i][0], row_last_offset, column_last_offset, rows, columns,
+                                               center_head)
+                new_obs[geese_key+1, pos_index] = geese_dict['last_head']
 
+    # place food. I modify the food by the hunger rate so agent can hopefully predict when it will shrink
+    hunger_steps = obs_list[-1]['step'] % hunger_rate
+    if hunger_steps == hunger_rate - 1:
+        food_value = NEXT_STEP_HUNGER
+    else:
+        food_value = FOOD_OBS - hunger_steps * FOOD_STEP
+    for i in obs_list[-1]['food']:
+        food_index = center_head(i, row_offset, column_offset, rows, columns, center_head)
+        new_obs[8, food_index] = food_value
     #print("debugging obs")
     #print(new_obs.reshape(9, rows, columns))
     # print(new_obs[6].reshape(1, rows, columns))
@@ -78,11 +102,11 @@ def process_obs(obs_list, rows=7, columns=11, hunger_rate=40):
 
     # print("existing obs list", obs_list)
     # reshape new obs to grid
-    return new_obs.reshape(9, rows, columns), obs_list
+    return new_obs.reshape(rows, columns, 9), obs_list
 
 
 # turn kaggle env obs into 2D grid with everything represented
-def process_obs_2D(obs_list, center_head=False, rows=7, columns=11, hunger_rate=40):
+def process_obs_2D(obs_list, center_head=True, rows=7, columns=11, hunger_rate=40):
     # https://www.kaggle.com/victordelafuente/dqn-goose-with-stable-baselines3-pytorch
     # https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
 
@@ -104,17 +128,18 @@ def process_obs_2D(obs_list, center_head=False, rows=7, columns=11, hunger_rate=
     new_obs = np.zeros((rows * columns), dtype=np.float32)
     # print("in process obs ", obs_list, obs_len)
 
-    # place food. I modify the food by the hunger rate so agent can hopefully predict when it will shrink
-    hunger_steps = current_obs['step'] % hunger_rate
-    if hunger_steps == hunger_rate - 1:
-        food_value = NEXT_STEP_HUNGER
-    else:
-        food_value = FOOD_OBS - hunger_steps * FOOD_STEP
-    for i in current_obs['food']:
-        new_obs[i] = food_value
-
     geese_obs = current_obs['geese']
     agent_index = current_obs['index']
+    # get agent offset
+    if center_head and len(geese_obs[agent_index]) > 0:
+        head_index = geese_obs[agent_index][0]
+        row_offset = (rows//2) - (head_index // columns)
+        column_offset = (columns//2) - (head_index % columns)
+        head_index = obs_list[0]['geese'][agent_index]
+        row_last_offset = (rows//2) - (head_index // columns)
+        column_last_offset = (columns//2) - (head_index % columns)
+    else:
+        row_offset, column_offset, row_last_offset, column_last_offset = 0, 0, 0, 0
     # place snake body parts
     for i in range(0, len(geese_obs)):
         if i == agent_index:
@@ -128,26 +153,36 @@ def process_obs_2D(obs_list, center_head=False, rows=7, columns=11, hunger_rate=
         # check if goose is alive
         if goose_len > 0:
             # place head
-            # import pdb; pdb.set_trace()
-            new_obs[geese_obs[i][0]] = geese_dict[geese_key]['head']
+            pos_index = center_head(geese_obs[i][0], row_offset, column_offset, rows, columns, center_head)
+            new_obs[pos_index] = geese_dict[geese_key]['head']
             # check if goose has other body parts than head
             if goose_len > 1:
                 for j in range(1, goose_len - 1):
-                    new_obs[geese_obs[i][j]] = geese_dict[geese_key]['mid']
+                    pos_index = center_head(geese_obs[i][j], row_offset, column_offset, rows, columns, center_head)
+                    new_obs[pos_index] = geese_dict[geese_key]['mid']
                 # place tail
-                new_obs[geese_obs[i][-1]] = geese_dict[geese_key]['tail']
+                pos_index = center_head(geese_obs[i][-1], row_offset, column_offset, rows, columns, center_head)
+                new_obs[pos_index] = geese_dict[geese_key]['tail']
                 # place head position from last turn
                 if obs_len > 1:
-                    new_obs[obs_list[0]['geese'][i][0]] = geese_dict[geese_key]['last_head']
+                    pos_index = center_head(obs_list[0]['geese'][i][0], row_offset, column_offset, rows, columns, center_head)
+                    new_obs[pos_index] = geese_dict[geese_key]['last_head']
             else:
                 # goose is of length 1, not turn one and and if space is empty then place prior head position
                 if obs_len > 1 and new_obs[obs_list[0]['geese'][i][0]] == 0:
-                    new_obs[obs_list[0]['geese'][i][0]] = geese_dict[geese_key]['last_head_no_tail']
+                    pos_index = center_head(obs_list[0]['geese'][i][0], row_last_offset, column_last_offset, rows,
+                                            columns, center_head)
+                    new_obs[pos_index] = geese_dict[geese_key]['last_head_no_tail']
 
-    # move head of agent into center position
-    # if center_head:
-    # new_obs = new_obs.reshape(rows, columns)
-    # head_value = current_obs['geese'][agent_index][0]
+    # place food. I modify the food by the hunger rate so agent can hopefully predict when it will shrink
+    hunger_steps = current_obs['step'] % hunger_rate
+    if hunger_steps == hunger_rate - 1:
+        food_value = NEXT_STEP_HUNGER
+    else:
+        food_value = FOOD_OBS - hunger_steps * FOOD_STEP
+    for i in current_obs['food']:
+        pos_index = center_head(i, row_offset, column_offset, rows, columns, center_head)
+        new_obs[pos_index] = food_value
 
     # print("debugging obs", obs_list[-1])
     # print(new_obs.reshape(rows, columns))
@@ -161,7 +196,7 @@ def process_obs_2D(obs_list, center_head=False, rows=7, columns=11, hunger_rate=
 class HungryGeeseEnv(gym.Env):
     metadata = {'render.modes': ['human', 'ansi']}
 
-    def __init__(self, opponents=['greedy', 'greedy', 'greedy'], center_head=False, debug=False, episode_steps=200,
+    def __init__(self, opponents=['greedy', 'greedy', 'greedy'], center_head=True, debug=False, episode_steps=200,
                  hunger_rate=40):
         super(HungryGeeseEnv, self).__init__()
         # self.num_envs = 1
@@ -184,7 +219,7 @@ class HungryGeeseEnv(gym.Env):
         # reward
         self.reward_range = (-1, 1)  # not sure if this is needed
         self.reward_dict = {'survive': 0.0, 'food': 0.001, 'death': -1., 1: 1., 2: 0.1, 3: -0.8,
-                            4: -0.9}  # the numbers are what place agent came in
+                            4: -1.}  # the numbers are what place agent came in
         # obs_list stores obs from kaggle env. this env's obs space is preprocessed into a 2D grid of float values
         self.obs_list = []
         self.observation_space = spaces.Box(low=-1., high=1.,
@@ -204,15 +239,16 @@ class HungryGeeseEnv(gym.Env):
         self.obs_list.append(obs)
         reward = self._process_reward(r, self.obs_list, done)
         obs, self.obs_list = process_obs(self.obs_list, rows=self.rows, columns=self.columns,
-                                         hunger_rate=self.hunger_rate)
+                                         hunger_rate=self.hunger_rate, center_head=self.center_head)
         self.last_action = action_string
+
         return obs, reward, done, info
 
     def reset(self):
         obs = self.env.reset()
         self.obs_list = [obs]
         obs, self.obs_list = process_obs(self.obs_list, rows=self.rows, columns=self.columns,
-                                         hunger_rate=self.hunger_rate)
+                                         hunger_rate=self.hunger_rate, center_head=self.center_head)
         self.last_action = "NONE"
         return obs
 
@@ -225,39 +261,56 @@ class HungryGeeseEnv(gym.Env):
         # reward config is in self.reward_dict
         # tiebreaker is survival time then length apparently
         # https://www.kaggle.com/c/hungry-geese/discussion/214515
-        if r == 0:
-            # agent has 0 reward, thus must be eliminated
-            return self.reward_dict['death']
-        else:
-            # agent has positive reward, thus must be alive
-            if done:
-                # three done conditions: agent eliminated (reward 0 above), opponents eliminated (else),
-                # or env had reached max steps
-                if obs_list[-1]['step'] == self.max_steps:
-                    agent_index = obs_list[-1]['index']
-                    goose_lengths = obs_list[-1]['geese']
-                    train_agent_length = len(goose_lengths[agent_index])
-                    # 2nd tiebreaker is final length I think
-                    goose_place = 1
-                    for i in range(0, self.agents):
-                        if i == agent_index:
-                            continue
-                        if train_agent_length < len(goose_lengths[i]):
-                            goose_place += 1
-                    return self.reward_dict[goose_place]
-                else:
-                    # agent won
-                    return self.reward_dict[1]
-            else:
-                # food bonus: compare lengths to see if food bonus
-                if len(obs_list) > 1:
-                    agent_index = obs_list[-1]['index']
-                    current_length = len(obs_list[-1]['geese'][agent_index])
-                    last_length = len(obs_list[-2]['geese'][agent_index])
-                    if current_length > last_length:
-                        return self.reward_dict['food']
 
-                return self.reward_dict['survive']
+        if done:
+            # episode over. three conditions: max steps, agent one, agent is eliminated
+            # agent length determines place. ie if only goose with length > 0 then winner
+            # if max steps, tie breaker is agent length
+            # if agent eliminated place is in comparison to how many geese are alive
+            agent_index = obs_list[-1]['index']
+            goose_lengths = obs_list[-1]['geese']
+            train_agent_length = len(goose_lengths[agent_index])
+            goose_place = 1
+            for i in range(0, self.agents):
+                if i == agent_index:
+                    continue
+                if train_agent_length < len(goose_lengths[i]):
+                    goose_place += 1
+            return self.reward_dict[goose_place]
+
+        # if r == 0:
+        #     # agent has 0 reward, thus must be eliminated
+        #     return self.reward_dict['death']
+        # else:
+        #     # agent has positive reward, thus must be alive
+        #     if done:
+        #         # three done conditions: agent eliminated (reward 0 above), opponents eliminated (else),
+        #         # or env had reached max steps
+        #         if obs_list[-1]['step'] == self.max_steps:
+        #             agent_index = obs_list[-1]['index']
+        #             goose_lengths = obs_list[-1]['geese']
+        #             train_agent_length = len(goose_lengths[agent_index])
+        #             # 2nd tiebreaker is final length I think
+        #             goose_place = 1
+        #             for i in range(0, self.agents):
+        #                 if i == agent_index:
+        #                     continue
+        #                 if train_agent_length < len(goose_lengths[i]):
+        #                     goose_place += 1
+        #             return self.reward_dict[goose_place]
+        #         else:
+        #             # agent won
+        #             return self.reward_dict[1]
+        #     else:
+        #         # food bonus: compare lengths to see if food bonus
+        #         if len(obs_list) > 1:
+        #             agent_index = obs_list[-1]['index']
+        #             current_length = len(obs_list[-1]['geese'][agent_index])
+        #             last_length = len(obs_list[-2]['geese'][agent_index])
+        #             if current_length > last_length:
+        #                 return self.reward_dict['food']
+        #
+        #         return self.reward_dict['survive']
 
     def render(self, mode='human'):
         print(self.obs_list[-1])
