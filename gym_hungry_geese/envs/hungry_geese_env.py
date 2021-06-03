@@ -24,7 +24,7 @@ def center_head_offset(pos, row_offset, col_offset, rows=7, columns=11, center_h
     if center_head:
         pos_row = ((pos // columns) + row_offset) % rows
         pos_col = ((pos % columns) + col_offset) % columns
-        pos = pos_row * rows + pos_col
+        pos = pos_row * columns + pos_col
     return pos
 
 def get_offsets(pos, rows=7, columns=11):
