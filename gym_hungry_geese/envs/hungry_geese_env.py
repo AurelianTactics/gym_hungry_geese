@@ -93,7 +93,7 @@ def process_obs(obs_list, rows=7, columns=11, hunger_rate=40, center_head=True):
     else:
         food_value = FOOD_OBS - hunger_steps * FOOD_STEP
     for i in obs_list[-1]['food']:
-        food_index = center_head(i, row_offset, column_offset, rows, columns, center_head)
+        food_index = center_head_offset(i, row_offset, column_offset, rows, columns, center_head)
         new_obs[8, food_index] = food_value
     #print("debugging obs")
     #print(new_obs.reshape(9, rows, columns))
@@ -149,24 +149,24 @@ def process_obs_2D(obs_list, center_head=True, rows=7, columns=11, hunger_rate=4
         # check if goose is alive
         if goose_len > 0:
             # place head
-            pos_index = center_head(geese_obs[i][0], row_offset, column_offset, rows, columns, center_head)
+            pos_index = center_head_offset(geese_obs[i][0], row_offset, column_offset, rows, columns, center_head)
             new_obs[pos_index] = geese_dict[geese_key]['head']
             # check if goose has other body parts than head
             if goose_len > 1:
                 for j in range(1, goose_len - 1):
-                    pos_index = center_head(geese_obs[i][j], row_offset, column_offset, rows, columns, center_head)
+                    pos_index = center_head_offset(geese_obs[i][j], row_offset, column_offset, rows, columns, center_head)
                     new_obs[pos_index] = geese_dict[geese_key]['mid']
                 # place tail
-                pos_index = center_head(geese_obs[i][-1], row_offset, column_offset, rows, columns, center_head)
+                pos_index = center_head_offset(geese_obs[i][-1], row_offset, column_offset, rows, columns, center_head)
                 new_obs[pos_index] = geese_dict[geese_key]['tail']
                 # place head position from last turn
                 if obs_len > 1:
-                    pos_index = center_head(obs_list[0]['geese'][i][0], row_offset, column_offset, rows, columns, center_head)
+                    pos_index = center_head_offset(obs_list[0]['geese'][i][0], row_offset, column_offset, rows, columns, center_head)
                     new_obs[pos_index] = geese_dict[geese_key]['last_head']
             else:
                 # goose is of length 1, not turn one and and if space is empty then place prior head position
                 if obs_len > 1 and new_obs[obs_list[0]['geese'][i][0]] == 0:
-                    pos_index = center_head(obs_list[0]['geese'][i][0], row_last_offset, column_last_offset, rows,
+                    pos_index = center_head_offset(obs_list[0]['geese'][i][0], row_last_offset, column_last_offset, rows,
                                             columns, center_head)
                     new_obs[pos_index] = geese_dict[geese_key]['last_head_no_tail']
 
@@ -177,7 +177,7 @@ def process_obs_2D(obs_list, center_head=True, rows=7, columns=11, hunger_rate=4
     else:
         food_value = FOOD_OBS - hunger_steps * FOOD_STEP
     for i in current_obs['food']:
-        pos_index = center_head(i, row_offset, column_offset, rows, columns, center_head)
+        pos_index = center_head_offset(i, row_offset, column_offset, rows, columns, center_head)
         new_obs[pos_index] = food_value
 
     # print("debugging obs", obs_list[-1])
