@@ -276,6 +276,8 @@ class HungryGeeseEnv(gym.Env):
                 if train_agent_length < len(goose_lengths[i]):
                     goose_place += 1
             return self.reward_dict[goose_place]
+        else:
+            return 0.
 
         # if r == 0:
         #     # agent has 0 reward, thus must be eliminated
