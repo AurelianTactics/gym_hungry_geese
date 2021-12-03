@@ -218,8 +218,11 @@ class HungryGeeseEnv(gym.Env):
                             4: -1.}  # the numbers are what place agent came in
         # obs_list stores obs from kaggle env. this env's obs space is preprocessed into a 2D grid of float values
         self.obs_list = []
+#         self.observation_space = spaces.Box(low=-1., high=1.,
+#                                             shape=(9, self.rows, self.columns), dtype=np.float32)
+        # editing for example usage
         self.observation_space = spaces.Box(low=-1., high=1.,
-                                            shape=(9, self.rows, self.columns), dtype=np.float32)
+                                            shape=(self.rows, self.columns, 9), dtype=np.float32)
         # self.observation_space = spaces.Box(low=-1., high=1.,
         #                                     shape=(self.rows*self.columns,), dtype=np.float32)
         self.obs = self.env.reset()
